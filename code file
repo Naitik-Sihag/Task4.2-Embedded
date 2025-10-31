@@ -1,115 +1,57 @@
-/* 
-   SIT210 - Task 4.2C (Arduino Nano 33 IoT)
-   Multiple Interrupts Example
 
-   - Push button on pin D2 will toggle LED1
-   - PIR motion sensor on pin D3 will toggle LED2
-   - Interrupts detect button presses and sensor triggers
-   - Main loop checks "flags" and updates LEDs with debounce
-*/
+const int buttonPin = 3;   // Push button input (active LOW)
+const int pirPin = 2;      // PIR motion sensor output (HIGH when motion detected)
+const int led1 = 5;        // LED1, controlled by the button
+const int led2 = 6;        // LED2, controlled by the PIR sensor
 
-const uint8_t BUTTON_PIN = 2;   // Pushbutton connected here
-const uint8_t SENSOR_PIN = 3;   // PIR sensor output connected here
-const uint8_t LED1_PIN   = 5;   // LED1 connected here
-const uint8_t LED2_PIN   = 6;   // LED2 connected here
+volatile bool led1State = LOW;
+volatile bool led2State = LOW;
+volatile unsigned long lastButtonPress = 0; // for debounce
 
-// These "flags" are signals from the interrupt routines
-// They are set to 'true' when an event happens
-volatile bool buttonFlag = false;
-volatile bool sensorFlag = false;
 
-// These variables are used for debouncing (avoiding false multiple triggers)
-unsigned long lastButtonMillis = 0;
-unsigned long lastSensorMillis = 0;
-const unsigned long DEBOUNCE_MS = 200; // 200ms = 0.2 second debounce window
+void handleButtonInterrupt() {
+  unsigned long now = millis();
 
-// Variables to remember the ON/OFF state of LEDs
-bool led1State = false;
-bool led2State = false;
+  // Debounce: ignore if <200 ms since last press
+  if (now - lastButtonPress > 200) {
+    if (digitalRead(buttonPin) == LOW) { // only act when actually pressed
+      led1State = !led1State;
+      digitalWrite(led1, led1State);
+      Serial.println(led1State ? "Button pressed → LED1 ON" : "Button pressed → LED1 OFF");
+    }
+  }
 
-/* 
-   setup() runs once when the board is powered or reset.
-   Here we set up Serial communication, configure pins,
-   and attach the interrupt functions.
-*/
+  lastButtonPress = now;
+}
+
+
+void handlePirInterrupt() {
+  // Read PIR state directly (HIGH = motion, LOW = no motion)
+  led2State = digitalRead(pirPin);
+  digitalWrite(led2, led2State);
+
+  Serial.println(led2State ? "Motion detected → LED2 ON" : "Motion ended → LED2 OFF");
+}
+
 void setup() {
-  Serial.begin(115200);              // Start Serial Monitor at 115200 baud
-  while (!Serial) { }                // Wait until Serial Monitor opens
+  pinMode(led1, OUTPUT);
+  pinMode(led2, OUTPUT);
+  pinMode(buttonPin, INPUT_PULLUP); // internal pull-up
+  pinMode(pirPin, INPUT);
 
-  // Configure LED pins as outputs
-  pinMode(LED1_PIN, OUTPUT);
-  pinMode(LED2_PIN, OUTPUT);
-  digitalWrite(LED1_PIN, LOW);       // Start with LEDs OFF
-  digitalWrite(LED2_PIN, LOW);
+  Serial.begin(9600);
+  delay(1000); // allow hardware to stabilize
+  while (!Serial);
 
-  // Configure button pin with internal pull-up resistor
-  // This means the button pin will be normally HIGH, and when pressed it goes LOW
-  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  digitalWrite(led1, LOW);
+  digitalWrite(led2, LOW);
 
-  // Configure sensor pin as input
-  pinMode(SENSOR_PIN, INPUT);
-
-  // Attach interrupts:
-  // When button goes from HIGH to LOW (pressed), call buttonISR()
-  attachInterrupt(digitalPinToInterrupt(BUTTON_PIN), buttonISR, FALLING);
-
-  // When sensor goes from LOW to HIGH (motion detected), call sensorISR()
-  attachInterrupt(digitalPinToInterrupt(SENSOR_PIN), sensorISR, RISING);
-
-  Serial.println("Task4.2C initialized. Waiting for button or sensor events...");
+  // Attach interrupts
+  attachInterrupt(digitalPinToInterrupt(buttonPin), handleButtonInterrupt, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(pirPin), handlePirInterrupt, CHANGE);
 }
 
-/* 
-   loop() runs again and again forever.
-   We check the flags set by the interrupt routines,
-   handle debouncing, and update LEDs + print messages.
-*/
+
 void loop() {
-  // --- Handle Button Events ---
-  if (buttonFlag) {                        // If button ISR has set the flag
-    unsigned long now = millis();          // Current time in ms
-    if (now - lastButtonMillis >= DEBOUNCE_MS) {  // Check debounce
-      lastButtonMillis = now;              // Update last valid press time
-      led1State = !led1State;              // Toggle LED1 state (ON -> OFF -> ON ...)
-      digitalWrite(LED1_PIN, led1State ? HIGH : LOW);
-
-      Serial.print("Button interrupt -> LED1 is now: ");
-      Serial.println(led1State ? "ON" : "OFF");
-    }
-    buttonFlag = false;                    // Clear the flag after handling
-  }
-
-  // --- Handle Sensor Events ---
-  if (sensorFlag) {                        // If sensor ISR has set the flag
-    unsigned long now = millis();
-    if (now - lastSensorMillis >= DEBOUNCE_MS) {  // Check debounce
-      lastSensorMillis = now;
-      led2State = !led2State;              // Toggle LED2 state
-      digitalWrite(LED2_PIN, led2State ? HIGH : LOW);
-
-      Serial.print("Sensor interrupt -> LED2 is now: ");
-      Serial.println(led2State ? "ON" : "OFF");
-    }
-    sensorFlag = false;                    // Clear the flag after handling
-  }
-
-  delay(10);  // Small delay to avoid busy looping
-}
-
-/* 
-   buttonISR() is the Interrupt Service Routine for the button.
-   It is called automatically when the button is pressed.
-   We DO NOT do heavy work here — just set a flag.
-*/
-void buttonISR() {
-  buttonFlag = true;  // Tell the main loop that the button was pressed
-}
-
-/* 
-   sensorISR() is the Interrupt Service Routine for the PIR sensor.
-   It is called automatically when the sensor detects motion.
-   Again, we only set a flag here.
-*/
-void sensorISR() {
-  sensorFlag = true;  // Tell the main loop that the sensor triggered
+  // Nothing here — interrupts handle everything
 }
